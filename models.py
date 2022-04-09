@@ -43,6 +43,7 @@ def train_svm_classifier(x_data, y_data, C, random_state):
 
 
 train_x, train_y, test_x = get_data()
+train_adaboost_classifier(train_x, train_y,100,0)
 print(train_x)
 print(train_y)
 print(test_x)
