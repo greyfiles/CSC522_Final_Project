@@ -16,9 +16,25 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 from sklearn.ensemble import RandomForestClassifier
-
+import matplotlib.pyplot as plt
 
 from sampling import one_sided_selection, random_undersampling, smote
+from sklearn import metrics
+from sklearn.metrics import roc_auc_score
+
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import auc
+import matplotlib.pyplot as plt
+from sklearn import metrics
+
+def pr_auc(model, x_test, y_test):
+    
+    
+    c = model.predict_proba(x_test)[:, 1]
+    precision, recall, thresholds = precision_recall_curve(y_test, c)
+    a = auc(recall, precision)
+    return precision , recall,thresholds, a
 
 def get_raw_data(n,noTest= False,test_size = 0.2):
     """
@@ -141,6 +157,7 @@ rf = False
 
 
 numberOfRows = float('inf')
+numberOfRows = 300000
 X, Y, test_x = get_data(n= numberOfRows, noTest= True)
 
 # spiltting the data
@@ -154,19 +171,18 @@ res3_x_train,res3_y_train = smote(X_train,Y_train)
 # random forest
 
 if rf:
-    # Not done
-    # To do
 
-    model = train_svm_classifier(X_train,Y_train)
+
+    model = RandomForestClassifier(random_state=0).fit(X_train,Y_train)
     print(f1_score(Y_test, model.predict(X_test), average='macro'))
 
-    model2 = train_svm_classifier(res_x_train,res_y_train)
+    model2 = RandomForestClassifier(random_state=0).fit(res_x_train,res_y_train)
     print(f1_score(Y_test, model2.predict(X_test), average='macro'))
 
-    model3 = train_svm_classifier(res2_x_train,res2_y_train)
+    model3 = RandomForestClassifier(random_state=0).fit(res2_x_train,res2_y_train)
     print(f1_score(Y_test, model3.predict(X_test), average='macro'))
 
-    model4 = train_svm_classifier(res3_x_train,res3_y_train)
+    model4 = RandomForestClassifier(random_state=0).fit(res3_x_train,res3_y_train)
     print(f1_score(Y_test, model4.predict(X_test), average='macro'))
 
 
@@ -179,8 +195,8 @@ if sv:
     model2 = train_svm_classifier(res_x_train,res_y_train)
     print(f1_score(Y_test, model2.predict(X_test), average='macro'))
 
-    model3 = train_svm_classifier(res2_x_train,res2_y_train)
-    print(f1_score(Y_test, model3.predict(X_test), average='macro'))
+    model3svm = train_svm_classifier(res2_x_train,res2_y_train)
+    print(f1_score(Y_test, model3svm.predict(X_test), average='macro'))
 
     model4 = train_svm_classifier(res3_x_train,res3_y_train)
     print(f1_score(Y_test, model4.predict(X_test), average='macro'))
@@ -199,15 +215,73 @@ if ada:
     model3 = train_adaboost_classifier(res2_x_train,res2_y_train,n_estimators=n_estimators)
     print(f1_score(Y_test, model3.predict(X_test), average='macro'))
 
-    model4 = train_adaboost_classifier(res3_x_train,res3_y_train,n_estimators=n_estimators)
+    model4ada = train_adaboost_classifier(res3_x_train,res3_y_train,n_estimators=n_estimators)
     print(f1_score(Y_test, model4.predict(X_test), average='macro'))
 
 
-#print(time.process_time() - start)
+# Final chosen models
+
+
+n_estimators = n = 20
+model3svm = train_svm_classifier(res2_x_train,res2_y_train)
+model4ada = train_adaboost_classifier(res2_x_train,res2_y_train,n_estimators=n_estimators)
+rfmodel = RandomForestClassifier(random_state=0,n_estimators=200)
+rfmodel.fit(res2_x_train,res2_y_train)
+y_pred_svm = model3svm.predict(X_test)
+y_pred_ada = model4ada.predict(X_test)
+y_pred_rf = rfmodel.predict(X_test)
+print('Ada', f1_score(Y_test,y_pred_ada , average='macro'))
+print('SVM', f1_score(Y_test, y_pred_svm, average='macro'))
+print('RF', f1_score(Y_test, y_pred_rf, average='macro'))
+
+
+# plotting PR-Curve
+
+Y_test = Y_test.map({'True': 1, 'False': 0}).astype(int)
+
+tree_fpr, tree_tpr, tree_thresh, tree_auc = pr_auc(model3svm, X_test, Y_test)
+ada_fpr, ada_tpr, ada_thresh, ada_auc = pr_auc(model4ada, X_test, Y_test)
+rf_fpr, rf_tpr, rf_thresh, rf_auc = pr_auc(rfmodel, X_test, Y_test)
+plt.figure(0).clf()
+plt.plot(tree_fpr,tree_tpr,label="SVM, auc="+str(tree_auc))
+plt.plot(ada_fpr,ada_tpr,label="Adaboost, auc="+str(ada_auc))
+plt.plot(rf_fpr,rf_tpr,label="RF, auc="+str(rf_auc))
+
+
+plt.legend(loc=0)
+
+# GridSearch Cross validation for random forest
+
+from sklearn.model_selection import GridSearchCV
+
+rfc=RandomForestClassifier(random_state=0)
+param_grid = { 
+    'n_estimators': [200, 500],
+    'max_features': ['auto', 'sqrt', 'log2'],
+    'max_depth' : [4,5,6,7,8],
+    'criterion' :['gini', 'entropy']
+}
+CV_rfc = GridSearchCV(estimator=rfc, param_grid=param_grid, cv= 5)
+CV_rfc.fit(res2_x_train, res2_y_train)
+CV_rfc.best_params_
+CV_rfc.best_score_
 
 
 
-# code for cross validation - to do later
+
+# training the whole datset with random forest and producing predictions for unlabeled test data
+
+numberOfRows = float('inf')
+X, Y, test_x = get_data(n= numberOfRows, noTest= False)
+res2_x_train,res2_y_train = random_undersampling(X,Y)
+rfmodel = RandomForestClassifier(random_state=0,n_estimators=200)
+rfmodel.fit(res2_x_train,res2_y_train)
+test_pred = rfmodel.predict_proba(test_x)
+pd.DataFrame(test_pred[:,1], columns=['target']).to_csv('predictions.csv', index=False)
+
+
+
+# old code for cross validation
 
 '''scores = cross_validation(train_x,Y_train,test_size= 0.2 ,k= 7,random_seed= 0,model = model)
 print(np.mean(scores))
