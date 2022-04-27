@@ -63,8 +63,9 @@ def get_raw_data(n,noTest= False,test_size = 0.2):
         i += 1
         rows1.append(row)
     
-    '''if noTest:
-        i = 0
+    if noTest:
+        test = None
+        ''' i = 0
         test_index = int(n * (test_size + 1))
         for row in csvreader2:
             if i < n:
@@ -72,11 +73,10 @@ def get_raw_data(n,noTest= False,test_size = 0.2):
             elif i >= test_index:
                 break
             rows2.append(row)
-            i += 1
+            i += 1'''
     else:
-
         for row in csvreader2:
-            rows2.append(row)'''
+            rows2.append(row)
             
     train = pd.DataFrame(data=rows1, columns=header1)
     test = pd.DataFrame(data=rows2, columns=header2)
@@ -130,7 +130,7 @@ def train_svm_classifier(x_data, y_data, C=1.0, random_state=0):
     Output:
         trained SVM classifier
     """
-    return SVC(C=C, random_state=random_state).fit(x_data, y_data)
+    return SVC(C=C, random_state=random_state,probability=True).fit(x_data, y_data)
 
     
 def cross_validation(X,Y,test_size,k,model,random_seed):
@@ -156,8 +156,8 @@ rf = False
 # start = time.process_time()
 
 
-numberOfRows = float('inf')
-numberOfRows = 300000
+#numberOfRows = float('inf')
+numberOfRows = 200000
 X, Y, test_x = get_data(n= numberOfRows, noTest= True)
 
 # spiltting the data
@@ -219,52 +219,55 @@ if ada:
     print(f1_score(Y_test, model4.predict(X_test), average='macro'))
 
 
-# Final chosen models
+# Pr curves for final chosen models
+
+pr_curve = False
+
+if pr_curve:
+
+    n_estimators = n = 20
+    model3svm = train_svm_classifier(res2_x_train,res2_y_train)
+    model4ada = train_adaboost_classifier(res2_x_train,res2_y_train,n_estimators=n_estimators)
+    rfmodel = RandomForestClassifier(random_state=0,n_estimators=200)
+    rfmodel.fit(res2_x_train,res2_y_train)
+    y_pred_svm = model3svm.predict(X_test)
+    y_pred_ada = model4ada.predict(X_test)
+    y_pred_rf = rfmodel.predict(X_test)
+    print('Ada', f1_score(Y_test,y_pred_ada , average='macro'))
+    print('SVM', f1_score(Y_test, y_pred_svm, average='macro'))
+    print('RF', f1_score(Y_test, y_pred_rf, average='macro'))
 
 
-n_estimators = n = 20
-model3svm = train_svm_classifier(res2_x_train,res2_y_train)
-model4ada = train_adaboost_classifier(res2_x_train,res2_y_train,n_estimators=n_estimators)
-rfmodel = RandomForestClassifier(random_state=0,n_estimators=200)
-rfmodel.fit(res2_x_train,res2_y_train)
-y_pred_svm = model3svm.predict(X_test)
-y_pred_ada = model4ada.predict(X_test)
-y_pred_rf = rfmodel.predict(X_test)
-print('Ada', f1_score(Y_test,y_pred_ada , average='macro'))
-print('SVM', f1_score(Y_test, y_pred_svm, average='macro'))
-print('RF', f1_score(Y_test, y_pred_rf, average='macro'))
+    # plotting PR-Curve
+
+    Y_test = Y_test.map({'True': 1, 'False': 0}).astype(int)
+
+    tree_fpr, tree_tpr, tree_thresh, tree_auc = pr_auc(model3svm, X_test, Y_test)
+    ada_fpr, ada_tpr, ada_thresh, ada_auc = pr_auc(model4ada, X_test, Y_test)
+    rf_fpr, rf_tpr, rf_thresh, rf_auc = pr_auc(rfmodel, X_test, Y_test)
+    plt.figure(0).clf()
+    plt.plot(tree_fpr,tree_tpr,label="SVM, auc="+str(tree_auc))
+    plt.plot(ada_fpr,ada_tpr,label="Adaboost, auc="+str(ada_auc))
+    plt.plot(rf_fpr,rf_tpr,label="RF, auc="+str(rf_auc))
 
 
-# plotting PR-Curve
+    plt.legend(loc=0)
 
-Y_test = Y_test.map({'True': 1, 'False': 0}).astype(int)
+    # GridSearch Cross validation for random forest
 
-tree_fpr, tree_tpr, tree_thresh, tree_auc = pr_auc(model3svm, X_test, Y_test)
-ada_fpr, ada_tpr, ada_thresh, ada_auc = pr_auc(model4ada, X_test, Y_test)
-rf_fpr, rf_tpr, rf_thresh, rf_auc = pr_auc(rfmodel, X_test, Y_test)
-plt.figure(0).clf()
-plt.plot(tree_fpr,tree_tpr,label="SVM, auc="+str(tree_auc))
-plt.plot(ada_fpr,ada_tpr,label="Adaboost, auc="+str(ada_auc))
-plt.plot(rf_fpr,rf_tpr,label="RF, auc="+str(rf_auc))
+    from sklearn.model_selection import GridSearchCV
 
-
-plt.legend(loc=0)
-
-# GridSearch Cross validation for random forest
-
-from sklearn.model_selection import GridSearchCV
-
-rfc=RandomForestClassifier(random_state=0)
-param_grid = { 
-    'n_estimators': [200, 500],
-    'max_features': ['auto', 'sqrt', 'log2'],
-    'max_depth' : [4,5,6,7,8],
-    'criterion' :['gini', 'entropy']
-}
-CV_rfc = GridSearchCV(estimator=rfc, param_grid=param_grid, cv= 5)
-CV_rfc.fit(res2_x_train, res2_y_train)
-CV_rfc.best_params_
-CV_rfc.best_score_
+    rfc=RandomForestClassifier(random_state=0)
+    param_grid = { 
+        'n_estimators': [200, 500],
+        'max_features': ['auto', 'sqrt', 'log2'],
+        'max_depth' : [4,5,6,7,8],
+        'criterion' :['gini', 'entropy']
+    }
+    CV_rfc = GridSearchCV(estimator=rfc, param_grid=param_grid, cv= 5)
+    CV_rfc.fit(res2_x_train, res2_y_train)
+    CV_rfc.best_params_
+    CV_rfc.best_score_
 
 
 
